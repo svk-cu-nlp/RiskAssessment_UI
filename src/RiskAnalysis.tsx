@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, XCircle, MessageSquare } from 'lucide-react';
+import { analyzeRisks, submitRiskFeedback } from './services/api';
 
 interface Comment {
   id: string;
@@ -18,9 +19,12 @@ interface Rejection {
 
 interface RiskAnalysisProps {
   onBack: () => void;
+  features: string;
+  srsContent: string;
+  projectSummary: string;
 }
 
-function RiskAnalysis({ onBack }: RiskAnalysisProps) {
+function RiskAnalysis({ onBack, features, srsContent, projectSummary }: RiskAnalysisProps) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [rejections, setRejections] = useState<Rejection[]>([]);
   const [selectedText, setSelectedText] = useState('');
@@ -30,29 +34,54 @@ function RiskAnalysis({ onBack }: RiskAnalysisProps) {
   const [hoveredAnnotation, setHoveredAnnotation] = useState<string | null>(null);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
   const [reportApproved, setReportApproved] = useState(false);
+  const [riskReport, setRiskReport] = useState<string>('Loading risk analysis...');
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Mock risk analysis report
-  const riskReport = `Risk Analysis Report
+  useEffect(() => {
+    fetchRiskAnalysis();
+  }, []);
 
-1. Authentication Mechanisms (High Risk)
-- Current specification lacks multi-factor authentication requirements
-- Session timeout period of 30 minutes may be too long for sensitive operations
-- Recommended: Add MFA requirement and reduce timeout to 15 minutes
+  const fetchRiskAnalysis = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const response = await analyzeRisks(features, srsContent, projectSummary);
+      setRiskReport(response.risk_analysis);
+    } catch (err) {
+      setError('Failed to fetch risk analysis. Please try again.');
+      console.error('Error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-2. Data Encryption (Medium Risk)
-- AES-256 encryption is appropriate for data at rest
-- TLS 1.3 requirement is good practice
-- Consider adding specific key management requirements
+  const handleSubmitFeedback = async () => {
+    try {
+      setIsLoading(true);
+      const feedback = {
+        comments: comments.map(comment => ({
+          text: comment.text,
+          selected_text: comment.selectedText,
+          start_index: comment.startIndex,
+          end_index: comment.endIndex
+        })),
+        rejections: rejections.map(rejection => ({
+          selected_text: rejection.selectedText,
+          start_index: rejection.startIndex,
+          end_index: rejection.endIndex
+        }))
+      };
 
-3. Audit Logging (Low Risk)
-- Comprehensive audit logging requirements are well-defined
-- Consider adding specific retention period requirements
-- Add requirements for log encryption
-
-4. System Security (Medium Risk)
-- Input validation requirement is too generic
-- 48-hour patch window may be too long for critical vulnerabilities
-- Disaster recovery testing frequency is adequate`;
+      await submitRiskFeedback(riskReport, feedback);
+      setFeedbackSubmitted(true);
+    } catch (err) {
+      setError('Failed to submit feedback. Please try again.');
+      console.error('Error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleTextSelection = () => {
     const selection = window.getSelection();
@@ -147,6 +176,7 @@ function RiskAnalysis({ onBack }: RiskAnalysisProps) {
   return (
     <div className="min-h-screen bg-gray-900 text-white p-8">
       <div className="max-w-6xl mx-auto">
+        {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold">Risk Analysis Report</h1>
           <button
@@ -157,15 +187,27 @@ function RiskAnalysis({ onBack }: RiskAnalysisProps) {
           </button>
         </div>
 
+        {error && (
+          <div className="bg-red-500/20 border border-red-500 rounded-lg p-4 mb-6">
+            {error}
+          </div>
+        )}
+
         <div className="flex gap-6">
           {/* Main Report Panel */}
           <div className="flex-1 bg-gray-800 rounded-lg p-6">
-            <div
-              id="risk-report-container"
-              className="text-gray-200 whitespace-pre-wrap"
-              onMouseUp={handleTextSelection}
-              dangerouslySetInnerHTML={{ __html: renderReportWithHighlights() }}
-            />
+            {isLoading ? (
+              <div className="flex items-center justify-center h-64">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+              </div>
+            ) : (
+              <div
+                id="risk-report-container"
+                className="text-gray-200 whitespace-pre-wrap"
+                onMouseUp={handleTextSelection}
+                dangerouslySetInnerHTML={{ __html: renderReportWithHighlights() }}
+              />
+            )}
           </div>
 
           {/* Annotations Panel */}
@@ -277,15 +319,19 @@ function RiskAnalysis({ onBack }: RiskAnalysisProps) {
         {/* Action Buttons */}
         <div className="grid grid-cols-2 gap-4 mt-8">
           <button
-            onClick={() => setFeedbackSubmitted(true)}
+            onClick={handleSubmitFeedback}
             className={`py-3 px-6 rounded-lg font-medium flex items-center justify-center ${
-              feedbackSubmitted
+              isLoading || feedbackSubmitted
                 ? 'bg-gray-600 cursor-not-allowed'
                 : 'bg-gray-700 hover:bg-gray-600'
             }`}
-            disabled={feedbackSubmitted}
+            disabled={isLoading || feedbackSubmitted}
           >
-            Submit Feedback
+            {isLoading ? (
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+            ) : (
+              'Submit Feedback'
+            )}
           </button>
           <button
             onClick={() => setReportApproved(true)}

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Upload, X, XCircle, MessageSquare, Wand2 } from 'lucide-react';
 import RiskAnalysis from './RiskAnalysis';
+import { extractFeatures, submitFeatureFeedback } from './services/api';
 
 interface Comment {
   id: string;
@@ -31,6 +32,12 @@ function App() {
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
   const [featuresApproved, setFeaturesApproved] = useState(false);
   const [showRiskAnalysis, setShowRiskAnalysis] = useState(false);
+  const [srsContent, setSrsContent] = useState<string>('');
+  const [projectSummary, setProjectSummary] = useState<string>('');
+  const [features, setFeatures] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [feedbackMessage, setFeedbackMessage] = useState<string>('');
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -39,34 +46,27 @@ function App() {
     }
   };
 
-  const handleExtractContent = () => {
-    // Simulated content extraction
-    const mockContent = `Security Requirements Specification
+  const handleExtractFeatures = async () => {
+    if (!file) return;
 
-1. Authentication and Access Control
-The system must implement strong authentication mechanisms using industry-standard protocols.
-User sessions must timeout after 30 minutes of inactivity.
-All access to sensitive data must be logged and monitored.
-
-2. Data Protection
-All sensitive data must be encrypted using AES-256 encryption at rest.
-Data transmission must use TLS 1.3 or higher for encryption in transit.
-Regular backup procedures must be implemented with encryption.
-
-3. Audit and Compliance
-The system shall maintain comprehensive audit logs for all security-related events.
-Audit logs must be protected from unauthorized access and tampering.
-Regular security assessments must be conducted every quarter.
-
-4. System Security
-The application must implement input validation for all user inputs.
-Regular security patches must be applied within 48 hours of release.
-A disaster recovery plan must be maintained and tested bi-annually.`;
-
-    setContent(mockContent);
-    setShowContent(true);
-    setFeedbackSubmitted(false);
-    setFeaturesApproved(false);
+    try {
+      setIsLoading(true);
+      setError(null);
+      const result = await extractFeatures(file);
+      
+      setContent(result.feature_details);
+      setSrsContent(result.srs_text);
+      setProjectSummary(result.project_summary);
+      setFeatures(result.feature_details);
+      setShowContent(true);
+      setFeedbackSubmitted(false);
+      setFeaturesApproved(false);
+    } catch (err) {
+      setError('Failed to extract features. Please try again.');
+      console.error('Error:', err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleTextSelection = () => {
@@ -175,10 +175,43 @@ A disaster recovery plan must be maintained and tested bi-annually.`;
     setRejections(rejections.filter(r => r.id !== id));
   };
 
-  const handleSubmitFeedback = () => {
-    setFeedbackSubmitted(true);
-    // Here you would typically send the feedback to a backend service
-    console.log('Feedback submitted:', { comments, rejections });
+  const handleSubmitFeedback = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      // Create the feedback object that includes both structured feedback and message
+      const feedback = {
+        message: feedbackMessage,  // Add the feedback message
+        comments: comments.map(comment => ({
+          text: comment.text,
+          selected_text: comment.selectedText,
+          start_index: comment.startIndex,
+          end_index: comment.endIndex
+        })),
+        rejections: rejections.map(rejection => ({
+          selected_text: rejection.selectedText,
+          start_index: rejection.startIndex,
+          end_index: rejection.endIndex
+        }))
+      };
+
+      const result = await submitFeatureFeedback(
+        features,
+        feedback,
+        srsContent,
+        projectSummary
+      );
+
+      setContent(result.feature_details);
+      setFeatures(result.feature_details);
+      setFeedbackSubmitted(true);
+    } catch (err) {
+      setError('Failed to submit feedback. Please try again.');
+      console.error('Error:', err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleApproveFeatures = () => {
@@ -192,7 +225,14 @@ A disaster recovery plan must be maintained and tested bi-annually.`;
   };
 
   if (showRiskAnalysis) {
-    return <RiskAnalysis onBack={() => setShowRiskAnalysis(false)} />;
+    return (
+      <RiskAnalysis 
+        onBack={() => setShowRiskAnalysis(false)}
+        features={features}
+        srsContent={srsContent}
+        projectSummary={projectSummary}
+      />
+    );
   }
 
   return (
@@ -200,6 +240,12 @@ A disaster recovery plan must be maintained and tested bi-annually.`;
       <div className="max-w-6xl mx-auto">
         <h1 className="text-3xl font-bold mb-8">Security Requirements Analysis</h1>
         
+        {error && (
+          <div className="bg-red-500/20 border border-red-500 rounded-lg p-4 mb-6">
+            {error}
+          </div>
+        )}
+
         <p className="text-gray-300 mb-8">
           Upload your requirements specification document and analyze the content. Select text to reject specific portions or add comments.
         </p>
@@ -212,7 +258,7 @@ A disaster recovery plan must be maintained and tested bi-annually.`;
               onChange={handleFileUpload}
               className="hidden"
               id="file-upload"
-              accept=".pdf,.doc,.docx,.txt"
+              accept=".pdf"
             />
             <label
               htmlFor="file-upload"
@@ -220,7 +266,7 @@ A disaster recovery plan must be maintained and tested bi-annually.`;
             >
               <Upload className="w-12 h-12 text-indigo-500 mb-4" />
               <span className="text-lg font-medium">Upload Requirements Document</span>
-              <span className="text-sm text-gray-400 mt-2">PDF, DOC, DOCX, or TXT files</span>
+              <span className="text-sm text-gray-400 mt-2">PDF files</span>
             </label>
           </div>
           {file && (
@@ -231,14 +277,20 @@ A disaster recovery plan must be maintained and tested bi-annually.`;
           )}
         </div>
 
-        {/* Extract Content Button */}
+        {/* Extract Features Button */}
         <button
-          onClick={handleExtractContent}
+          onClick={handleExtractFeatures}
           className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-6 rounded-lg mb-8 flex items-center justify-center"
-          disabled={!file}
+          disabled={!file || isLoading}
         >
-          <Wand2 className="w-5 h-5 mr-2" />
-          Extract Content
+          {isLoading ? (
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+          ) : (
+            <>
+              <Wand2 className="w-5 h-5 mr-2" />
+              Extract Features
+            </>
+          )}
         </button>
 
         {/* Content Analysis Section */}
@@ -365,6 +417,17 @@ A disaster recovery plan must be maintained and tested bi-annually.`;
                     </div>
                   </div>
                 )}
+
+                {/* Feedback Message Input */}
+                <div className="bg-gray-800 rounded-lg p-4">
+                  <h3 className="text-lg font-medium mb-2">Overall Feedback</h3>
+                  <textarea
+                    value={feedbackMessage}
+                    onChange={(e) => setFeedbackMessage(e.target.value)}
+                    placeholder="Enter your feedback for feature re-evaluation..."
+                    className="w-full bg-gray-700 rounded px-3 py-2 text-white placeholder-gray-400 min-h-[100px]"
+                  />
+                </div>
               </div>
             </div>
 
@@ -372,14 +435,18 @@ A disaster recovery plan must be maintained and tested bi-annually.`;
             <div className="grid grid-cols-2 gap-4 mb-4">
               <button
                 onClick={handleSubmitFeedback}
-                className={`py-3 px-6 rounded-lg font-medium flex items-center justify-center ${
-                  feedbackSubmitted
+                disabled={isLoading || (!feedbackMessage && comments.length === 0 && rejections.length === 0)}
+                className={`w-full ${
+                  isLoading || (!feedbackMessage && comments.length === 0 && rejections.length === 0)
                     ? 'bg-gray-600 cursor-not-allowed'
-                    : 'bg-gray-700 hover:bg-gray-600'
-                }`}
-                disabled={feedbackSubmitted}
+                    : 'bg-indigo-600 hover:bg-indigo-700'
+                } text-white font-medium py-3 px-6 rounded-lg flex items-center justify-center`}
               >
-                Submit Feedback
+                {isLoading ? (
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                ) : (
+                  'Submit Feedback'
+                )}
               </button>
               <button
                 onClick={handleApproveFeatures}
