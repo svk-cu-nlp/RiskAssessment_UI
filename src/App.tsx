@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Upload, X, XCircle, MessageSquare, Wand2 } from 'lucide-react';
+import RiskAnalysis from './RiskAnalysis';
 
 interface Comment {
   id: string;
@@ -29,6 +30,7 @@ function App() {
   const [hoveredAnnotation, setHoveredAnnotation] = useState<string | null>(null);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
   const [featuresApproved, setFeaturesApproved] = useState(false);
+  const [showRiskAnalysis, setShowRiskAnalysis] = useState(false);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -186,9 +188,12 @@ A disaster recovery plan must be maintained and tested bi-annually.`;
   };
 
   const handleAnalyzeRisks = () => {
-    // Here you would typically trigger risk analysis
-    console.log('Analyzing risks...');
+    setShowRiskAnalysis(true);
   };
+
+  if (showRiskAnalysis) {
+    return <RiskAnalysis onBack={() => setShowRiskAnalysis(false)} />;
+  }
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-8">
