@@ -87,7 +87,7 @@ export async function extractFeatures(file: File): Promise<FeatureExtractionResp
 
 export async function submitFeatureFeedback(
   features: string,
-  feedback: FeedbackData,
+  feedback: string,  // Changed to simple string as that's what the API expects
   srsContent: string,
   projectSummary: string
 ): Promise<{ feature_details: string }> {
@@ -101,7 +101,7 @@ export async function submitFeatureFeedback(
         srs_content: srsContent,
         project_summary: projectSummary,
         previous_features: features,
-        user_feedback: feedback
+        user_feedback: feedback  // Just send the feedback message
       }),
     });
 
@@ -183,6 +183,7 @@ export async function submitRiskFeedback(
     throw error;
   }
 }
+
 
 
 

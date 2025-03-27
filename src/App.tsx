@@ -180,32 +180,28 @@ function App() {
       setIsLoading(true);
       setError(null);
 
-      // Create the feedback object that includes both structured feedback and message
-      const feedback = {
-        message: feedbackMessage,  // Add the feedback message
-        comments: comments.map(comment => ({
-          text: comment.text,
-          selected_text: comment.selectedText,
-          start_index: comment.startIndex,
-          end_index: comment.endIndex
-        })),
-        rejections: rejections.map(rejection => ({
-          selected_text: rejection.selectedText,
-          start_index: rejection.startIndex,
-          end_index: rejection.endIndex
-        }))
-      };
-
       const result = await submitFeatureFeedback(
         features,
-        feedback,
+        feedbackMessage,
         srsContent,
         projectSummary
       );
 
+      // Update the content and features
       setContent(result.feature_details);
       setFeatures(result.feature_details);
       setFeedbackSubmitted(true);
+
+      // Clear all feedback-related states
+      setFeedbackMessage('');  // Clear feedback message
+      setComments([]);        // Clear all comments
+      setRejections([]);      // Clear all rejections
+      setSelectedText('');    // Clear selected text
+      setSelectionIndices(null);  // Clear selection indices
+      setShowCommentInput(false); // Hide comment input if it's open
+      setCommentInput('');    // Clear any pending comment input
+      setHoveredAnnotation(null); // Clear any hover state
+
     } catch (err) {
       setError('Failed to submit feedback. Please try again.');
       console.error('Error:', err);
